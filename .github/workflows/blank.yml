@@ -2,7 +2,7 @@ name: Performance Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   load-test:
