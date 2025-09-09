@@ -1,0 +1,45 @@
+name: GPT Auto Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh jq
+
+      - name: Get PR diff
+        run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+
+      - name: Review with GPT
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          REVIEW=$(jq -Rs . < pr.diff | xargs -0 -I{} \
+            curl -s https://api.openai.com/v1/chat/completions \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $OPENAI_API_KEY" \
+              -d '{
+                "model": "gpt-4o-mini",
+                "messages": [
+                  {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
+                  {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality and best practices\n- Potential bugs or issues\n- Security implications\n- Performance considerations"}
+                ],
+                "max_tokens": 800
+              }' | jq -r '.choices[0].message.content')
+
+          echo "$REVIEW" > review.txt
+
+      - name: Post comment to PR
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
