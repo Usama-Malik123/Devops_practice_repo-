@@ -3,19 +3,13 @@ import sqlite3
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-
-# 🚨 Potential Issue: Debug mode left enabled
 app.config["DEBUG"] = True
-
-# 🚨 Potential Issue: Hardcoded secret
 SECRET_KEY = "12345"
 
 @app.route("/users", methods=["POST"])
 def add_user():
     data = request.json
     username = data.get("username")
-
-    # 🚨 Potential Issue: SQL Injection (string concatenation)
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute(f"INSERT INTO users (username) VALUES ('{username}')")
