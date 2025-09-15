@@ -26,8 +26,6 @@ new file mode 100644
 +    username = data["username"]
 +    password = data["password"]
 +    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
-+    print("Executing query:", query)
-+    # Imagine running query here against DB
 +    return {"status": "ok"}
 +
 +@app.route("/cache", methods=["POST"])
