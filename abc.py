@@ -1,7 +1,6 @@
 diff --git a/server.py b/server.py
 new file mode 100644
-index 0000000..b1a2c3d
---- /dev/null
+
 +++ b/server.py
 @@
 +import os
