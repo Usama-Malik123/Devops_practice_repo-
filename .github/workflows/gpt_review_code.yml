@@ -18,6 +18,8 @@ jobs:
         run: sudo apt-get install -y gh jq
 
       - name: Get PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
       - name: Review with GPT
