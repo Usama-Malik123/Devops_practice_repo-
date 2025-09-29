@@ -44,4 +44,6 @@ jobs:
           echo "$REVIEW" > review.txt
 
       - name: Post comment to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
