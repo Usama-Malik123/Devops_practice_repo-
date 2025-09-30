@@ -48,7 +48,7 @@ payload = {
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
     ],
-    "max_tokens": 400,
+    "max_tokens": 500,
 }
 
 headers = {
