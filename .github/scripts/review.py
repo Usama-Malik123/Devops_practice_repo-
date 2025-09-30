@@ -20,23 +20,22 @@ for file in pr.get_files():
 
 # Prepare prompt
 prompt = f"""
-You are an expert senior software engineer performing a pull request (PR) review.
+You are a senior software engineer performing a pull request (PR) review.  
+Do not write conversational text.  
+Always return your feedback in the following structured format:
 
-Your task:
-- Carefully read the provided code diff.
-- Identify **bugs, security issues, or risky logic**.
-- Highlight **code smells** (bad patterns, anti-patterns, unnecessary complexity).
-- Suggest **better practices** (readability, maintainability, testability).
-- Point out **performance issues** or inefficient code.
-- Suggest removing or simplifying **redundant or duplicate code**.
-- If everything looks fine, explicitly say so.
+---
+Summary: ✅ Looks good overall / ⚠️ Issues found
 
-Rules for your response:
-- Be **short, clear, and actionable**.
-- Use **bullet points** for each finding.
-- Start with a one-line summary: "✅ Looks good overall" OR "⚠️ Issues found".
-- Do NOT rewrite the entire code, only give comments.
-- Only mention issues relevant to this PR diff (avoid generic textbook advice). 
+Findings:
+- [category] Short, clear, actionable point
+- [category] Short, clear, actionable point
+
+Commit Suggestion:
+Provide a short commit-style message that summarizes the main fixes needed.
+---
+
+Categories can be: security, bug, readability, performance, maintainability.
 
 Code diff:
 {diff_text}
