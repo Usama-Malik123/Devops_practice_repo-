@@ -38,8 +38,8 @@ jobs:
                   {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
                   {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality\n- Potential bugs\n- Security concerns\n- Performance improvements"}
                 ],
-                "max_tokens": 800
-              }' | jq -r '.choices[0].message.content')
+                "max_tokens": 1000
+                }' | jq -r '.choices[0].message.content')
 
           echo "$REVIEW" > review.txt
 
