@@ -1,49 +1,39 @@
-name: GPT Auto Review
+name: PR Review with OpenRouter
+
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}   # 👈 needed for gh CLI
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}  # 👈 make sure you added this in repo secrets
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Install GitHub CLI
-        run: sudo apt-get install -y gh jq
+      - name: Generate PR diff
+        run: |
+          git fetch origin main
+          git diff origin/main...HEAD > pr.diff
 
-      - name: Get PR diff
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
-
-      - name: Review with GPT (GPT-5-nano)
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+      - name: Call OpenRouter API
         run: |
           RAW_RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Authorization: Bearer $OPENROUTER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
-              \"model\": \"openai/gpt-5-nano\",
+              \"model\": \"openai/gpt-5-mini\",
               \"messages\": [
-          {\"role\": \"system\", \"content\": \"You are a GitHub PR reviewer.\"},
-          {\"role\": \"user\", \"content\": $(jq -Rs . < pr.diff)}
-           ]
-           }")
+                {\"role\": \"system\", \"content\": \"You are a code reviewer. Provide a short review of this PR diff.\"},
+                {\"role\": \"user\", \"content\": $(jq -Rs . < pr.diff)}
+              ]
+            }")
 
           echo "$RAW_RESPONSE" | jq -r '.choices[0].message.content' > review.txt
 
-           gh pr comment 68 --body-file review.txt
-
-      - name: Post comment to PR
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Post PR Comment
         run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
