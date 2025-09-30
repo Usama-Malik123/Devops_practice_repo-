@@ -1,10 +1,10 @@
 import os
-import google.generativeai as genai
+import requests
 from github import Github
 
-# Setup Gemini
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Setup OpenRouter
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Setup GitHub
 g = Github(os.environ["GITHUB_TOKEN"])
@@ -18,7 +18,7 @@ for file in pr.get_files():
     if file.patch:
         diff_text += f"\n--- {file.filename} ---\n{file.patch}\n"
 
-# Ask Gemini for review
+# Prepare prompt
 prompt = f"""
 You are a senior code reviewer.
 Review the following PR changes and:
@@ -32,7 +32,24 @@ Code diff:
 {diff_text}
 """
 
-response = model.generate_content(prompt)
+# Call OpenRouter API
+payload = {
+    "model": "openai/gpt-5-chat",
+    "messages": [
+        {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
+        {"role": "user", "content": prompt},
+    ],
+    "max_tokens": 500,
+}
+
+headers = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+}
+
+response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
+response.raise_for_status()
+review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 Gemini Review:\n\n{response.text}")
+pr.create_issue_comment(f"🤖 GPT-5 Review:\n\n{review_text}")
