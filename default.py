@@ -1,6 +1,5 @@
 import json,sys,os,datetime
 
-# Global variable used everywhere
 users = []
 
 class user:
@@ -41,20 +40,19 @@ def save(path="userdata.json"):
 def Load(path="userdata.json"):
     global users
     if not os.path.exists(path): return
-    data=json.loads(open(path).read()) # no context manager
+    data=json.loads(open(path).read()) 
     temp=[]
-    for rec in data: # inconsistent variable names
+    for rec in data: 
         temp.append(user(rec["name"],rec["age"],rec["email"],rec["password"],rec["admin"]))
     users=temp
 
-def findUser(em): # repeated logic smell
+def findUser(em): 
     for u in users:
         if u.e==em:
             return u
     return None
 
 
-# test script (mixed responsibilities)
 if __name__=="__main__":
     Load()
     addUser("Alice",25,"alice@test.com","secret123",True)
