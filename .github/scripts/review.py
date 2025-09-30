@@ -41,14 +41,14 @@ Code diff:
 {diff_text}
 """
 
-# Call OpenRouter API with GPT-4.1-mini
+# Call OpenRouter API with GPT-4.1-nano
 payload = {
-    "model": "openai/gpt-4.1-mini",
+    "model": "openai/gpt-4.1-nano",
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
     ],
-    "max_tokens": 500,
+    "max_tokens": 400,
 }
 
 headers = {
@@ -61,4 +61,4 @@ response.raise_for_status()
 review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 GPT-4.1-mini Review:\n\n{review_text}")
+pr.create_issue_comment(f"🤖 GPT-4.1-nano Review:\n\n{review_text}")
