@@ -143,8 +143,7 @@ def download_file():
 
 @app.route("/exec")
 def exec_cmd():
-    # ❌ Executes arbitrary command via shell
-    cmd = request.args.get("cmd", "")
+    
     out = run_shell(cmd)
     return jsonify({"output": out})
 
