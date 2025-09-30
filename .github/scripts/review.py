@@ -61,4 +61,6 @@ response.raise_for_status()
 review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 GPT-5 Review:\n\n{review_text}")
+pr.create_review(
+    body=f"🤖 GPT-5 Review:\n\n{review_text}",
+    event="COMMENT" 
