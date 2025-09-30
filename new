@@ -1,3 +1,7 @@
-hello
-i my performing testing using gpt 5 codex
-he
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback")
+
+if not username:
+    return jsonify({"error": "Username is required"}), 400
+
+cursor.execute("INSERT INTO users (username) VALUES (?)", (username,))
+
