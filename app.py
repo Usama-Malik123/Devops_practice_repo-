@@ -20,4 +20,4 @@ def add_user():
 
 @app.route("/health")
 def health():
-    return "OK"
+    return "clear"
