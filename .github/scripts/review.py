@@ -18,28 +18,37 @@ for file in pr.get_files():
     if file.patch:
         diff_text += f"\n--- {file.filename} ---\n{file.patch}\n"
 
-# Prepare prompt
+# Prepare prompt (your saved version)
 prompt = f"""
-You are a senior code reviewer.
-Review the following PR changes and:
-- Suggest improvements
-- Point out code smells
-- Recommend better practices
-- Suggest removal of redundant code
-- Keep response short and clear
+You are a senior software engineer providing a pull request (PR) review.  
+Write the review as if it is a single GitHub comment on the commit — concise, clear, and professional.
+
+Your review must:
+- Be consistent in tone and format across all PRs.
+- Point out bugs, logical errors, or edge cases.
+- Highlight security or performance concerns.
+- Suggest improvements in readability and maintainability.
+- Recommend removal of redundant or unnecessary code.
+- If the code is good overall, state that briefly and positively.
+
+Style guidelines:
+- Keep it short and to the point.
+- Do not start a conversation — this is a one-time review comment.
+- Use bullet points for findings.
+- Avoid over-explaining or adding unnecessary complexity.
 
 Code diff:
 {diff_text}
 """
 
-# Call OpenRouter API with GPT-5-mini
+# Call OpenRouter API with GPT-5-nano
 payload = {
     "model": "openai/gpt-5-nano",
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
     ],
-    "max_tokens": 500,
+    "max_tokens": 400,
 }
 
 headers = {
