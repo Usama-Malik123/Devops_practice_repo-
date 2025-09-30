@@ -32,9 +32,9 @@ Code diff:
 {diff_text}
 """
 
-# Call OpenRouter API with GPT-5-Codex
+# Call OpenRouter API with GPT-4.1
 payload = {
-    "model": "openai/gpt-5-codex",
+    "model": "openai/gpt-4.1",
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
@@ -52,4 +52,4 @@ response.raise_for_status()
 review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 GPT-5 Codex Review:\n\n{review_text}")
+pr.create_issue_comment(f"🤖 GPT-4.1 Review:\n\n{review_text}")
