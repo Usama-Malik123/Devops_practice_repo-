@@ -20,13 +20,22 @@ for file in pr.get_files():
 
 # Prepare prompt
 prompt = f"""
-You are a senior code reviewer.
-Review the following PR changes and:
-- Suggest improvements
-- Point out code smells
-- Recommend better practices
-- Suggest removal of redundant code
-- Keep response short and clear
+You are an experienced senior software engineer performing a professional pull request (PR) review.
+
+Your task:
+- Analyze the provided code changes carefully.
+- Identify potential bugs, logical errors, or edge cases.
+- Highlight security vulnerabilities or unsafe coding practices.
+- Point out performance issues or inefficient patterns.
+- Suggest improvements for readability, maintainability, and scalability.
+- Recommend the removal of redundant or dead code.
+- If everything looks good, explicitly confirm with a brief positive note.
+
+Guidelines:
+- Be objective, constructive, and concise.
+- Focus only on the provided diff (do not invent missing context).
+- Organize feedback with clear bullet points.
+- Use a professional and respectful tone.
 
 Code diff:
 {diff_text}
