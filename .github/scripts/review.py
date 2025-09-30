@@ -20,35 +20,35 @@ for file in pr.get_files():
 
 # Prepare prompt
 prompt = f"""
-You are an experienced senior software engineer performing a professional pull request (PR) review.
+You are a senior software engineer providing a pull request (PR) review.  
+Write the review as if it is a single GitHub comment on the commit — concise, clear, and professional.
 
-Your task:
-- Analyze the provided code changes carefully.
-- Identify potential bugs, logical errors, or edge cases.
-- Highlight security vulnerabilities or unsafe coding practices.
-- Point out performance issues or inefficient patterns.
-- Suggest improvements for readability, maintainability, and scalability.
-- Recommend the removal of redundant or dead code.
-- If everything looks good, explicitly confirm with a brief positive note.
+Your review must:
+- Be consistent in tone and format across all PRs.
+- Point out bugs, logical errors, or edge cases.
+- Highlight security or performance concerns.
+- Suggest improvements in readability and maintainability.
+- Recommend removal of redundant or unnecessary code.
+- If the code is good overall, state that briefly and positively.
 
-Guidelines:
-- Be objective, constructive, and concise.
-- Focus only on the provided diff (do not invent missing context).
-- Organize feedback with clear bullet points.
-- Use a professional and respectful tone.
+Style guidelines:
+- Keep it short and to the point.
+- Do not start a conversation — this is a one-time review comment.
+- Use bullet points for findings.
+- Avoid over-explaining or adding unnecessary complexity.
 
 Code diff:
 {diff_text}
 """
 
-# Call OpenRouter API with GPT-4.1
+# Call OpenRouter API with GPT-5-mini
 payload = {
-    "model": "openai/gpt-4.1",
+    "model": "openai/gpt-5-mini",
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
     ],
-    "max_tokens": 600,
+    "max_tokens": 500,
 }
 
 headers = {
@@ -61,4 +61,4 @@ response.raise_for_status()
 review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 GPT-4.1 Review:\n\n{review_text}")
+pr.create_issue_comment(f"🤖 GPT-5-mini Review:\n\n{review_text}")
