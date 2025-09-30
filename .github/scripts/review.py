@@ -20,35 +20,26 @@ for file in pr.get_files():
 
 # Prepare prompt
 prompt = f"""
-You are a senior software engineer performing a pull request (PR) review.  
-Do not write conversational text.  
-Always return your feedback in the following structured format:
-
----
-Summary: ✅ Looks good overall / ⚠️ Issues found
-
-Findings:
-- [category] Short, clear, actionable point
-- [category] Short, clear, actionable point
-
-Commit Suggestion:
-Provide a short commit-style message that summarizes the main fixes needed.
----
-
-Categories can be: security, bug, readability, performance, maintainability.
+You are a senior code reviewer.
+Review the following PR changes and:
+- Suggest improvements
+- Point out code smells
+- Recommend better practices
+- Suggest removal of redundant code
+- Keep response short and clear
 
 Code diff:
 {diff_text}
 """
 
-# Call OpenRouter API
+# Call OpenRouter API with GPT-5-Codex
 payload = {
     "model": "openai/gpt-5-codex",
     "messages": [
-        {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
+        {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
     ],
-    "max_tokens": 500,
+    "max_tokens": 600,
 }
 
 headers = {
@@ -61,7 +52,4 @@ response.raise_for_status()
 review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
-pr.create_review(
-    body=f"🤖 gpt-5-codex Review:\n\n{review_text}",
-    event="COMMENT" 
-)
+pr.create_issue_comment(f"🤖 GPT-5 Codex Review:\n\n{review_text}")
