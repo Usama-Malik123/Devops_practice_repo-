@@ -43,7 +43,7 @@ Code diff:
 
 # Call OpenRouter API
 payload = {
-    "model": "openai/gpt-5-chat",
+    "model": "openai/gpt-5-codex",
     "messages": [
         {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
@@ -62,5 +62,5 @@ review_text = response.json()["choices"][0]["message"]["content"]
 
 # Post comment to PR
 pr.create_review(
-    body=f"🤖 GPT-5 Review:\n\n{review_text}",
+    body=f"🤖 gpt-5-codex Review:\n\n{review_text}",
     event="COMMENT" 
