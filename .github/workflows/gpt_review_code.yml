@@ -22,7 +22,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
-      - name: Review with GPT
+      - name: Review with GPT (Codex)
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           REPO: ${{ github.repository }}
@@ -35,10 +35,10 @@ jobs:
               -d '{
                 "model": "openai/gpt-5-codex",
                 "messages": [
-                  {"role": "system", "content": "You are a senior software engineer reviewing GitHub PRs."},
-                  {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality and best practices\n- Potential bugs or issues\n- Security implications\n- Performance considerations"}
+                  {"role": "system", "content": "You are a senior code reviewer with deep knowledge of software engineering, security, and best practices."},
+                  {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality\n- Potential bugs\n- Security concerns\n- Performance improvements"}
                 ],
-                "max_tokens": 500
+                "max_tokens": 600
               }' | jq -r '.choices[0].message.content')
 
           echo "$REVIEW" > review.txt
