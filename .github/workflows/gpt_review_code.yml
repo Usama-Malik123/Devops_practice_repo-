@@ -28,7 +28,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          REVIEW=$(jq -Rs . < pr.diff | xargs -0 -I{} \
+          RAW_RESPONSE=$(jq -Rs . < pr.diff | xargs -0 -I{} \
             curl -s https://openrouter.ai/api/v1/chat/completions \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $OPENROUTER_API_KEY" \
@@ -39,9 +39,17 @@ jobs:
                   {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality\n- Potential bugs\n- Security concerns\n- Performance improvements"}
                 ],
                 "max_tokens": 400
-              }' | jq -r '.choices[0].message.content')
+              }')
 
-          echo "$REVIEW" > review.txt
+          echo "Raw API response:"
+          echo "$RAW_RESPONSE"
+
+          REVIEW=$(echo "$RAW_RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$REVIEW" ]; then
+            echo "⚠️ No response from GPT model." > review.txt
+          else
+            echo "$REVIEW" > review.txt
 
       - name: Post comment to PR
         env:
