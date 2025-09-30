@@ -1,1 +1,29 @@
-hello dell
+# math_utils.py
+
+def add_numbers(a, b):
+    # adds two numbers
+    return a + b
+
+def multiply_numbers(a, b):
+    return a*b  # inconsistent spacing
+
+def factorial(n):
+    # BAD: recursive without base case check for negative numbers
+    if n == 0:
+        return 1
+    else:
+        return n * factorial(n - 1)
+
+def is_even(num):
+    if num % 2 == 0:
+        return True
+    else:
+        return False  # could just return num % 2 == 0
+
+def print_numbers(nums):
+    # BAD: prints inside utility function (side effect)
+    for n in nums:
+        print("Number:", n)
+
+def divide_numbers(a, b):
+    return a / b  # BAD: no error handling for divide by zero
