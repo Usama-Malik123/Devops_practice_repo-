@@ -37,9 +37,9 @@ jobs:
                 "messages": [
                   {"role": "system", "content": "You are a senior code reviewer with deep knowledge of software engineering, security, and best practices."},
                   {"role": "user", "content": "Repository: '"$REPO"'\nPR Number: '"$PR_NUMBER"'\n\nDiff:\n{} \n\nPlease review this pull request with a focus on:\n- Code quality\n- Potential bugs\n- Security concerns\n- Performance improvements"}
-                ],
-                "max_tokens": 600
-              }' | jq -r '.choices[0].message.content')
+              ],
+              "max_tokens": 600
+              }' | jq -r '.choices[0].message.content // "⚠️ No review text returned"')
 
           echo "$REVIEW" > review.txt
 
