@@ -47,7 +47,7 @@ def Load(path="userdata.json"):
     users=temp
 
 def findUser(em): 
-    for u in users:
+    
         if u.e==em:
             return u
     return None
