@@ -1,0 +1,69 @@
+import os
+import requests
+from github import Github
+
+# Setup OpenRouter
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# Setup GitHub
+g = Github(os.environ["GITHUB_TOKEN"])
+repo = g.get_repo(os.environ["GITHUB_REPOSITORY"])
+pr_number = int(os.environ["GITHUB_REF"].split("/")[-1])
+pr = repo.get_pull(pr_number)
+
+# Collect changed files
+diff_text = ""
+for file in pr.get_files():
+    if file.patch:
+        diff_text += f"\n--- {file.filename} ---\n{file.patch}\n"
+
+if not diff_text.strip():
+    pr.create_issue_comment("⚠️ No code changes detected in this PR.")
+    exit(0)
+
+# Prepare prompt
+prompt = f"""
+You are a senior code reviewer.
+Review the following PR changes and:
+- Suggest improvements
+- Point out code smells
+- Recommend better practices
+- Suggest removal of redundant code
+- Keep response short and clear
+
+Code diff:
+{diff_text}
+"""
+
+# Call OpenRouter API
+payload = {
+    "model": "openai/gpt-5-codex",  # switched model
+    "messages": [
+        {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
+        {"role": "user", "content": prompt},
+    ],
+    "max_tokens": 600,
+}
+
+headers = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+}
+
+response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
+
+# Debug: print raw response (visible in GitHub Actions logs)
+print("RAW API RESPONSE:", response.text)
+
+review_text = None
+try:
+    review_text = response.json()["choices"][0]["message"]["content"].strip()
+except Exception as e:
+    print("Error parsing response:", e)
+
+if not review_text:
+    review_text = "⚠️ No review was generated."
+
+# Post comment to PR
+pr.create_issue_comment(f"🤖 GPT-5 Codex Review:\n\n{review_text}")
