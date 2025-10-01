@@ -8,35 +8,28 @@ jobs:
   review:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       pull-requests: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install GitHub CLI + jq
-        run: sudo apt-get update && sudo apt-get install -y gh jq
+      - run: sudo apt-get update && sudo apt-get install -y gh jq
 
-      - name: Get PR diff
+      - run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
-      - name: Review with GPT (OpenAI GPT-4.1-mini)
+      - name: Review with GPT
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Read PR diff
           DIFF=$(cat pr.diff)
-
-          # Build JSON body safely with jq
           BODY=$(jq -n \
-            --arg model "gpt-5-mini" \
+            --arg model "gpt-4.1-mini" \
             --arg repo "$REPO" \
             --arg pr "$PR_NUMBER" \
             --arg diff "$DIFF" \
@@ -44,32 +37,18 @@ jobs:
               model: $model,
               messages: [
                 {role: "system", content: "You are a senior software engineer reviewing GitHub PRs."},
-                {role: "user", content: "Repository: \($repo)\nPR Number: \($pr)\n\nDiff:\n\($diff)\n\nPlease review this pull request with a focus on:\n- Bugs & edge cases\n- Security issues\n- Performance improvements\n- Code quality & maintainability\n- Frontend/backend/monorepo best practices"}
+                {role: "user", content: "Repository: \($repo)\nPR Number: \($pr)\n\nDiff:\n\($diff)\n\nPlease review this pull request with a focus on:\n- Bugs & edge cases\n- Security issues\n- Performance improvements\n- Code quality & maintainability"}
               ],
-             max_completion_tokens: 500
+              max_tokens: 2000
             }')
-
-          # Call OpenAI API
           RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -d "$BODY")
-
-          echo "---- RAW OPENAI RESPONSE ----"
-          echo "$RESPONSE" | jq
-          echo "-----------------------------"
-
-          # Extract review text
           REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
-
-          # Fallback if API failed
-          if [ -z "$REVIEW" ]; then
-            REVIEW="⚠️ GPT did not return a response.\n\nRaw API output:\n\`\`\`json\n$RESPONSE\n\`\`\`"
-          fi
-
+          [ -z "$REVIEW" ] && REVIEW="⚠️ GPT did not return a response."
           echo "$REVIEW" > review.txt
 
-      - name: Post comment to PR
+      - run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
