@@ -36,7 +36,7 @@ jobs:
 
           # Build JSON body safely with jq
           BODY=$(jq -n \
-            --arg model "gpt-4.1-mini" \
+            --arg model "gpt-5-mini" \
             --arg repo "$REPO" \
             --arg pr "$PR_NUMBER" \
             --arg diff "$DIFF" \
