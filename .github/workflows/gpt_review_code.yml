@@ -10,13 +10,15 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install GitHub CLI
-        run: sudo apt-get install -y gh jq
+      - name: Install GitHub CLI + jq
+        run: sudo apt-get update && sudo apt-get install -y gh jq
 
       - name: Get PR diff
         env:
@@ -29,19 +31,32 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          DIFF=$(jq -Rs . < pr.diff)
-          REVIEW=$(curl -s https://api.openai.com/v1/chat/completions \
+          # Convert diff into safe JSON string
+          DIFF=$(cat pr.diff | jq -Rs .)
+
+          # Call OpenAI API
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -d "{
-             \"model\": \"gpt-4o-mini\",
-             \"messages\": [
-              {\"role\": \"system\", \"content\": \"You are a senior software engineer reviewing GitHub PRs.\"},
-              {\"role\": \"user\", \"content\": \"Repository: $REPO\nPR Number: $PR_NUMBER\n\nDiff:\n$DIFF\n\nPlease review this pull request.\"}
-            ],
-              \"max_tokens\": 1000
-            }" | jq -r '.choices[0].message.content')
+              \"model\": \"gpt-5-mini\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": \"You are a senior software engineer reviewing GitHub PRs.\"},
+                {\"role\": \"user\", \"content\": \"Repository: $REPO\nPR Number: $PR_NUMBER\n\nDiff:\n$DIFF\n\nPlease review this pull request with a focus on:\n- Bugs & edge cases\n- Security issues\n- Performance improvements\n- Code quality & maintainability\n- Frontend/backend/monorepo best practices\"}
+              ],
+              \"max_tokens\": 2000
+            }")
 
+          # Debug (uncomment if you need to see full response)
+          # echo "$RESPONSE" | jq
+
+          # Extract review text
+          REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Fallback if API failed
+          if [ -z "$REVIEW" ] || [ "$REVIEW" == "null" ]; then
+            REVIEW="⚠️ GPT did not return a response. Please check the workflow logs for details."
+          fi
 
           echo "$REVIEW" > review.txt
 
