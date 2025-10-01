@@ -20,7 +20,7 @@ for file in pr.get_files():
 
 # Professional prompt (frontend, backend, monorepo)
 prompt = f"""
-You are a senior software engineer reviewing a GitHub Pull Request (PR).  
+You are a senior software engineer reviewing a GitHub Pull Request (PR).
 Write the review as a single GitHub comment that is professional, clear, and actionable.
 
 Your review must:
@@ -43,9 +43,9 @@ Code diff:
 {diff_text}
 """
 
-# Call OpenAI API with GPT-5-mini
+# Call OpenAI API with safer model
 payload = {
-    "model": "gpt-5-mini",   # <-- direct OpenAI model
+    "model": "gpt-5-mini",   # <-- more reliable than gpt-5-mini
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
@@ -60,7 +60,21 @@ headers = {
 
 response = requests.post(OPENAI_URL, headers=headers, json=payload)
 response.raise_for_status()
-review_text = response.json()["choices"][0]["message"]["content"]
+data = response.json()
+
+# Debugging (optional, can be removed later)
+print("DEBUG OpenAI response:", data)
+
+# Safely extract review text
+review_text = (
+    data["choices"][0].get("message", {}).get("content")
+    or data["choices"][0].get("messages", {}).get("content")
+    or ""
+)
+
+# Fallback if still empty
+if not review_text:
+    review_text = "⚠️ Could not generate a review. Please check the diff size or API response."
 
 # Post comment to PR
-pr.create_issue_comment(f"🤖 GPT-5-mini Review:\n\n{review_text}")
+pr.create_issue_comment(f"🤖 GPT Review:\n\n{review_text}")
