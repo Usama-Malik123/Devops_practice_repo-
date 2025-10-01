@@ -25,7 +25,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
-      - name: Review with GPT (OpenAI GPT-5-mini)
+      - name: Review with GPT (OpenAI GPT-4.1-mini)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           REPO: ${{ github.repository }}
@@ -47,15 +47,16 @@ jobs:
               \"max_tokens\": 200
             }")
 
-          # Debug (uncomment if you need to see full response)
-          # echo "$RESPONSE" | jq
+          echo "---- RAW OPENAI RESPONSE ----"
+          echo "$RESPONSE" | jq
+          echo "-----------------------------"
 
           # Extract review text
-          REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
 
           # Fallback if API failed
-          if [ -z "$REVIEW" ] || [ "$REVIEW" == "null" ]; then
-            REVIEW="⚠️ GPT did not return a response. Please check the workflow logs for details."
+          if [ -z "$REVIEW" ]; then
+            REVIEW="⚠️ GPT did not return a response.\n\nRaw API output:\n\`\`\`json\n$RESPONSE\n\`\`\`"
           fi
 
           echo "$REVIEW" > review.txt
