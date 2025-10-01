@@ -45,7 +45,7 @@ Code diff:
 
 # Call OpenAI API with safer model
 payload = {
-    "model": "gpt-4.1-mini",   # <-- more reliable than gpt-5-mini
+    "model": "gpt-5-mini",   # <-- more reliable than gpt-5-mini
     "messages": [
         {"role": "system", "content": "You are an expert software engineer reviewing GitHub PRs."},
         {"role": "user", "content": prompt},
