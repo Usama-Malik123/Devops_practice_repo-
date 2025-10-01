@@ -46,7 +46,7 @@ jobs:
                 {role: "system", content: "You are a senior software engineer reviewing GitHub PRs."},
                 {role: "user", content: "Repository: \($repo)\nPR Number: \($pr)\n\nDiff:\n\($diff)\n\nPlease review this pull request with a focus on:\n- Bugs & edge cases\n- Security issues\n- Performance improvements\n- Code quality & maintainability\n- Frontend/backend/monorepo best practices"}
               ],
-              max_tokens: 200
+             max_completion_tokens: 200
             }')
 
           # Call OpenAI API
