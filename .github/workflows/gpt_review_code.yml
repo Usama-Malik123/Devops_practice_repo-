@@ -39,12 +39,12 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -d "{
-              \"model\": \"gpt-5-mini\",
+              \"model\": \"gpt-4.1-mini\",
               \"messages\": [
                 {\"role\": \"system\", \"content\": \"You are a senior software engineer reviewing GitHub PRs.\"},
                 {\"role\": \"user\", \"content\": \"Repository: $REPO\nPR Number: $PR_NUMBER\n\nDiff:\n$DIFF\n\nPlease review this pull request with a focus on:\n- Bugs & edge cases\n- Security issues\n- Performance improvements\n- Code quality & maintainability\n- Frontend/backend/monorepo best practices\"}
               ],
-              \"max_tokens\": 2000
+              \"max_tokens\": 200
             }")
 
           # Debug (uncomment if you need to see full response)
