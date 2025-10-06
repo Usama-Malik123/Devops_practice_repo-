@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from github import Github
-import time
+import time  # For retries
 
 # Setup
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -21,7 +21,7 @@ def call_openai(prompt, max_tokens=600, retries=3):  # Reduced tokens
     for attempt in range(retries):
         try:
             payload = {
-                "model": "gpt-4o-mini",
+                "model": "gpt-4o-mini",  # Fixed model name
                 "messages": [
                     {"role": "system", "content": "You are an expert code reviewer. Review ONLY this one file. Return ONLY a valid JSON array of issues. Be precise on lines from patch context."},
                     {"role": "user", "content": prompt},
@@ -153,38 +153,40 @@ JSON parse issue—check patch size. Raw GPT output: {content[:200]}..."""
     except Exception as e:
         print(f"Error {filename}: {e}")
 
-# ALWAYS post overall summary (enhanced with suggestions)
+# ALWAYS post overall summary (robust + debug)
 total_issues = len(all_inline_comments)
 print(f"\nTotal inlines posted: {total_issues}")
 
-# Quick final GPT call for holistic suggestions (if issues exist)
+# Static suggestions based on totals (no API call—avoids failure)
 suggestions = []
 if total_issues > 0:
-    agg_prompt = f"""Summarize top 3-5 improvements for this PR based on {total_issues} issues across {len(files_data)} files. Focus on security/bugs/performance. Return ONLY a numbered list (1-5 lines max), e.g.:
-1. Use env vars for hard-coded secrets.
-2. Parameterize SQL queries.
-Be concise and actionable."""
-    
-    try:
-        response = call_openai(agg_prompt, max_tokens=200)
-        content = response["choices"][0]["message"]["content"].strip()
-        suggestions = [line.strip() for line in content.split('\n') if line.strip() and line[0].isdigit()]
-        print(f"  ✓ Got {len(suggestions)} suggestions from GPT")
-    except Exception as e:
-        print(f"  ✗ Suggestions failed: {e} (using fallback)")
-        suggestions = ["1. Review all inline comments for fixes.", "2. Add unit tests for new features.", "3. Run security scans (e.g., Snyk)."]  # Fallback
+    critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get("HIGH", 0)
+    if critical_high > 0:
+        suggestions = [
+            "1. Prioritize SECURITY/BUG fixes (e.g., env vars for secrets, parameterized queries).",
+            "2. Add input validation/sanitization on all endpoints.",
+            "3. Run a full security scan (e.g., Bandit or Snyk)."
+        ]
+    else:
+        suggestions = [
+            "1. Improve MAINTAINABILITY (e.g., add comments/tests for complex logic).",
+            "2. Optimize PERFORMANCE (e.g., cache queries if applicable).",
+            "3. Follow STYLE guidelines (e.g., consistent formatting)."
+        ]
+else:
+    suggestions = ["1. Add unit tests for new code.", "2. Update docs/README for changes."]
 
 if total_issues == 0:
     overall_body = f"""## 🎉 PR Fully Reviewed
 
 **APPROVED** - No issues across {len(files_data)} files! Great work. Merge confidently. 🚀
 
-**Quick Tips:** Test edge cases and add docs for future-proofing."""
+**Quick Tips:** {suggestions[0]} {suggestions[1]}"""
 else:
     critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get("HIGH", 0)
     status = "🚨 BLOCKING CRITICALS" if severity_counts.get("CRITICAL", 0) > 0 else "⚠️ PRIORITY FIXES" if critical_high > 0 else "💡 IMPROVEMENTS"
     
-    suggestions_str = '\n'.join(suggestions[:5]) if suggestions else "Review per-file summaries for details."
+    suggestions_str = '\n'.join(suggestions)
     
     overall_body = f"""## 📊 Full PR Summary | {status}
 
@@ -197,10 +199,21 @@ else:
 
 Prioritize criticals before merge. Check inlines above!"""
 
-try:
-    pr.create_issue_comment(overall_body + (f"\n> {last_comment_id}" if last_comment_id else ""))
-    print("  ✓ Posted enhanced overall summary")
-except Exception as e:
-    print(f"  ✗ Overall summary failed: {e} - {overall_body[:100]}...")  # Log body for debug
+print(f"DEBUG: Overall body to post:\n{overall_body}")  # ← Key debug: Logs exact text
 
-print(f"✅ Complete! Enhanced summary with {len(suggestions)} suggestions added.")
+# Post with retry
+posted = False
+for attempt in range(2):  # Retry once
+    try:
+        pr.create_issue_comment(overall_body + (f"\n> {last_comment_id}" if last_comment_id else ""))
+        print("  ✓ Posted enhanced overall summary")
+        posted = True
+        break
+    except Exception as e:
+        print(f"  ✗ Overall post attempt {attempt+1} failed: {e}")
+        time.sleep(2)
+
+if not posted:
+    print(f"  ❌ Overall summary FAILED after retries. Body was: {overall_body[:200]}...")
+
+print(f"✅ Complete! {len(suggestions)} suggestions in summary.")
