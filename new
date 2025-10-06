@@ -1,16 +1,60 @@
- HEAD
-hello
- newbranch
-i my performing testing using gpt 5 codex
-he
+import os, sys, json, sqlite3, requests
+from flask import Flask, request
 
-codeaza
- master
+app = Flask(__name__)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback")
+# Global variable (bad practice)
+users_cache = {}
 
-if not username:
-    return jsonify({"error": "Username is required"}), 400
+# Hardcoded secret (security issue)
+API_KEY = "12345-SECRET-HARDCODED"
 
-cursor.execute("INSERT INTO users (username) VALUES (?)", (username,))
- f5ceb76 (with gpt-5-chat)
+def connect_db():
+    # Not using context manager (resource leak)
+    conn = sqlite3.connect("users.db")
+    return conn
+
+@app.route("/user/<user_id>")
+def get_user(user_id):
+    # SQL Injection vulnerability (string concatenation)
+    conn = connect_db()
+    cursor = conn.cursor()
+    query = f"SELECT * FROM users WHERE id = {user_id};"
+    cursor.execute(query)
+    data = cursor.fetchall()
+    conn.close()
+
+    # Returning sensitive info (security issue)
+    return json.dumps({"status": "ok", "data": data})
+
+@app.route("/fetch")
+def fetch_external():
+    url = request.args.get("url")
+    # SSRF vulnerability + no timeout (security + reliability issue)
+    response = requests.get(url)
+    return response.text
+
+@app.route("/process", methods=["POST"])
+def process_data():
+    data = request.json.get("numbers", [])
+    result = 0
+
+    # Inefficient loop (performance issue)
+    for i in range(len(data)):
+        for j in range(len(data)):
+            if data[i] == data[j]:
+                result += 1
+
+    # Wrong return type (bug: should be JSON, returns str)
+    return "Processed: " + str(result)
+
+@app.route("/divide")
+def divide():
+    # Possible crash: division by zero not handled
+    x = int(request.args.get("x", 1))
+    y = int(request.args.get("y", 0))
+    return str(x / y)
+
+if __name__ == "__main__":
+    # Debug mode enabled (security issue)
+    app.run(debug=True, host="0.0.0.0", port=8080)
