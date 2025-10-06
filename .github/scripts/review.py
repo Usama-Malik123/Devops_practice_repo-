@@ -153,33 +153,54 @@ JSON parse issue—check patch size. Raw GPT output: {content[:200]}..."""
     except Exception as e:
         print(f"Error {filename}: {e}")
 
-# ALWAYS post overall summary
+# ALWAYS post overall summary (enhanced with suggestions)
 total_issues = len(all_inline_comments)
 print(f"\nTotal inlines posted: {total_issues}")
 
-if total_issues == 0:
-    overall_body = """## 🎉 PR Fully Reviewed
+# Quick final GPT call for holistic suggestions (if issues exist)
+suggestions = []
+if total_issues > 0:
+    agg_prompt = f"""Summarize top 3-5 improvements for this PR based on {total_issues} issues across {len(files_data)} files. Focus on security/bugs/performance. Return ONLY a numbered list (1-5 lines max), e.g.:
+1. Use env vars for hard-coded secrets.
+2. Parameterize SQL queries.
+Be concise and actionable."""
+    
+    try:
+        response = call_openai(agg_prompt, max_tokens=200)
+        content = response["choices"][0]["message"]["content"].strip()
+        suggestions = [line.strip() for line in content.split('\n') if line.strip() and line[0].isdigit()]
+        print(f"  ✓ Got {len(suggestions)} suggestions from GPT")
+    except Exception as e:
+        print(f"  ✗ Suggestions failed: {e} (using fallback)")
+        suggestions = ["1. Review all inline comments for fixes.", "2. Add unit tests for new features.", "3. Run security scans (e.g., Snyk)."]  # Fallback
 
-**APPROVED** - No issues across all files! Great work. Merge away! 🚀"""
+if total_issues == 0:
+    overall_body = f"""## 🎉 PR Fully Reviewed
+
+**APPROVED** - No issues across {len(files_data)} files! Great work. Merge confidently. 🚀
+
+**Quick Tips:** Test edge cases and add docs for future-proofing."""
 else:
     critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get("HIGH", 0)
     status = "🚨 BLOCKING CRITICALS" if severity_counts.get("CRITICAL", 0) > 0 else "⚠️ PRIORITY FIXES" if critical_high > 0 else "💡 IMPROVEMENTS"
+    
+    suggestions_str = '\n'.join(suggestions[:5]) if suggestions else "Review per-file summaries for details."
+    
     overall_body = f"""## 📊 Full PR Summary | {status}
 
-Across {len(files_data)} files: {total_issues} inline issues flagged.
+**Totals ({total_issues} issues in {len(files_data)} files):**
+- 🔴 Critical: {severity_counts.get('CRITICAL', 0)} | 🟠 High: {severity_counts.get('HIGH', 0)}
+- 🟡 Medium: {severity_counts.get('MEDIUM', 0)} | 🔵 Low: {severity_counts.get('LOW', 0)}
 
-**Totals:**
-- 🔴 Critical: {severity_counts.get('CRITICAL', 0)}
-- 🟠 High: {severity_counts.get('HIGH', 0)}
-- 🟡 Medium: {severity_counts.get('MEDIUM', 0)}
-- 🔵 Low: {severity_counts.get('LOW', 0)}
+**Top Suggestions:**
+{suggestions_str}
 
-Check per-file summaries above for details."""
+Prioritize criticals before merge. Check inlines above!"""
 
 try:
     pr.create_issue_comment(overall_body + (f"\n> {last_comment_id}" if last_comment_id else ""))
-    print("  ✓ Posted overall summary")
+    print("  ✓ Posted enhanced overall summary")
 except Exception as e:
-    print(f"  ✗ Overall summary failed: {e}")
+    print(f"  ✗ Overall summary failed: {e} - {overall_body[:100]}...")  # Log body for debug
 
-print(f"✅ Complete! {total_issues} inlines + {len(files_data)} file summaries + 1 overall posted.")
+print(f"✅ Complete! Enhanced summary with {len(suggestions)} suggestions added.")
