@@ -15,10 +15,11 @@ pr = repo.get_pull(pr_number)
 
 all_inline_comments = []
 severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+file_errors = []  # track files that failed review
 
 
-def call_openai(prompt, max_tokens=1000, retries=3):
-    """Helper with retries for rate limits"""
+def call_openai(prompt, max_tokens=1000, retries=5):
+    """Helper with retries for rate limits (429)"""
     for attempt in range(retries):
         try:
             payload = {
@@ -37,11 +38,21 @@ def call_openai(prompt, max_tokens=1000, retries=3):
                 "Content-Type": "application/json",
             }
             response = requests.post(OPENAI_URL, headers=headers, json=payload)
+
+            if response.status_code == 429:
+                wait = 2 ** attempt
+                print(f"Rate limited (429). Sleeping {wait}s...")
+                time.sleep(wait)
+                continue
+
             response.raise_for_status()
             return response.json()
+
         except requests.exceptions.RequestException as e:
             if attempt < retries - 1:
-                time.sleep(2**attempt)
+                wait = 2 ** attempt
+                print(f"Request failed ({e}). Retrying in {wait}s...")
+                time.sleep(wait)
                 continue
             raise e
 
@@ -58,7 +69,6 @@ for file_data in files_data:
     filename = file_data["filename"]
     patch = file_data["patch"]
 
-    # File-specific prompt
     file_prompt = f"""
 Review this file: {filename}
 
@@ -68,7 +78,7 @@ Patch:
 INSTRUCTIONS:
 1. Review carefully for bugs, security, performance, code quality.
 2. Be specific: exact problem + solution.
-3. Use patch @@ headers for line context (e.g., @@ -10,5 +10,6 @@ means changes around original line 10).
+3. Use patch @@ headers for line context.
 4. Return ONLY valid JSON array:
 [
   {{
@@ -84,7 +94,7 @@ INSTRUCTIONS:
         response = call_openai(file_prompt, max_tokens=800)
         content = response["choices"][0]["message"]["content"].strip()
 
-        # Clean & parse JSON
+        # Clean JSON
         if "```" in content:
             parts = content.split("```")
             for part in parts:
@@ -143,7 +153,7 @@ INSTRUCTIONS:
                 except Exception as e:
                     print(f"  ✗ Inline failed {filename}:{line} - {e}")
 
-        # Post file summary
+        # File summary
         if file_comments:
             file_summary = f"""## 📁 {filename} Review
 
@@ -162,21 +172,23 @@ Review inline comments above for details."""
 
         time.sleep(1)
 
-    except json.JSONDecodeError as e:
-        print(f"JSON parse error for {filename}: {e}. Skipping.")
-        pr.create_issue_comment(
-            f"## ⚠️ {filename}\n\nReview failed—check logs. Patch too complex?"
-        )
     except Exception as e:
         print(f"Error for {filename}: {e}")
         pr.create_issue_comment(f"## ❌ {filename}\n\nReview error: {str(e)}")
+        file_errors.append(filename)
 
-# ==== PR-wide summary (only once at end) ====
+# ==== PR-wide summary ====
 print(f"\nTotal inline comments: {len(all_inline_comments)}")
 
-if len(all_inline_comments) == 0:
+if len(all_inline_comments) == 0 and len(file_errors) == 0:
     pr.create_issue_comment(
         "## 🎉 Full PR Review\n\n**APPROVED** - No issues across all files!"
+    )
+elif len(file_errors) > 0:
+    pr.create_issue_comment(
+        f"## ⚠️ Full PR Review Incomplete\n\n"
+        f"Some files could not be reviewed due to API errors or rate limits.\n\n"
+        f"**Unreviewed files:** {', '.join(file_errors)}"
     )
 else:
     critical_high = severity_counts["CRITICAL"] + severity_counts["HIGH"]
