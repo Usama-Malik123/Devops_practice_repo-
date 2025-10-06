@@ -16,51 +16,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - run: sudo apt-get update && sudo apt-get install -y gh jq
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests PyGithub
 
-      - name: Review with GPT
+      - name: Run Python Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }} 
-        run: |
-          # Split large diff into 1000-line chunks
-          CHUNK_SIZE=1000
-          split -l $CHUNK_SIZE pr.diff pr_chunk_
-
-          REVIEW=""
-
-          for FILE in pr_chunk_*; do
-            BODY=$(jq -n \
-              --arg model "gpt-4.1-mini" \
-              --arg repo "$REPO" \
-              --arg pr "$PR_NUMBER" \
-              --arg diff "$(cat $FILE)" \
-              '{
-                model: $model,
-                messages: [
-                  {role: "system", content: "You are a senior software engineer reviewing GitHub PRs."},
-                  {role: "user", content: "Repository: \($repo)\nPR Number: \($pr)\n\nDiff chunk:\n\($diff)\n\nPlease review this chunk for bugs, security, performance, and code quality."}
-                ],
-                max_tokens: 1000
-              }')
-
-            RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $OPENAI_API_KEY" \
-              -d "$BODY")
-
-            CHUNK_REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
-            [ -z "$CHUNK_REVIEW" ] && CHUNK_REVIEW="⚠️ GPT did not return a response for this chunk."
-            REVIEW+="$CHUNK_REVIEW"$'\n\n---\n\n'
-          done
-
-          echo "$REVIEW" > review.txt
-
-      - run: gh pr comment ${{ github.event.pull_request.number }} --body-file review.txt
-        env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: python scripts/review.py
