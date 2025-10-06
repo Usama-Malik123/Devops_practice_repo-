@@ -33,4 +33,4 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMIT_SHA: ${{ github.sha }}
-        run: .github/scripts/review.py
+        run: python .github/scripts/review.py
