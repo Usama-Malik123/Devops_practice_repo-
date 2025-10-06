@@ -1,8 +1,8 @@
 import os
 import json
 import requests
-import time
 from github import Github
+import time  # For retries
 
 # Setup
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -15,19 +15,20 @@ pr = repo.get_pull(pr_number)
 
 all_inline_comments = []
 severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-file_errors = []  # track files that failed review
+last_comment_id = None
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 1))  # 1 = per-file; 3 = group for big PRs
+SLEEP_BETWEEN = int(os.environ.get("SLEEP_BETWEEN", 1))  # s; increase to 5 for huge PRs
 
-
-def call_openai(prompt, max_tokens=1000, retries=5):
-    """Helper with retries for rate limits (429)"""
+def call_openai(prompt, max_tokens=800, retries=3):
+    """Helper with retries for rate limits"""
     for attempt in range(retries):
         try:
             payload = {
-                "model": "gpt-4.1-mini",
+                "model": "gpt-4o-mini",  # Fixed model
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are an expert code reviewer. Review this SINGLE file thoroughly. Return ONLY valid JSON array of inline comments. Be specific and focused.",
+                        "content": "You are an expert code reviewer. Review these 1-{BATCH_SIZE} files thoroughly. Return ONLY valid JSON array of inline comments. Be specific and focused.",
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -38,63 +39,68 @@ def call_openai(prompt, max_tokens=1000, retries=5):
                 "Content-Type": "application/json",
             }
             response = requests.post(OPENAI_URL, headers=headers, json=payload)
-
-            if response.status_code == 429:
-                wait = 2 ** attempt
-                print(f"Rate limited (429). Sleeping {wait}s...")
-                time.sleep(wait)
-                continue
-
             response.raise_for_status()
             return response.json()
-
         except requests.exceptions.RequestException as e:
             if attempt < retries - 1:
-                wait = 2 ** attempt
-                print(f"Request failed ({e}). Retrying in {wait}s...")
-                time.sleep(wait)
+                time.sleep(2**attempt)  # Exponential backoff
                 continue
             raise e
 
-
 # Collect files
-files_data = []
+files_data = [] 
 for file in pr.get_files():
     if file.patch:
         files_data.append({"filename": file.filename, "patch": file.patch})
 
-print(f"Processing {len(files_data)} files...")
+print(f"Processing {len(files_data)} files (batch size: {BATCH_SIZE})...")
 
-for file_data in files_data:
-    filename = file_data["filename"]
-    patch = file_data["patch"]
+# Batch loop for big PRs
+batches = [files_data[i:i + BATCH_SIZE] for i in range(0, len(files_data), BATCH_SIZE)]
+est_calls = len(batches)
+print(f"Estimated {est_calls} GPT calls (~${est_calls * 0.0001:.4f} cost with gpt-4o-mini).")
 
+for batch_idx, batch in enumerate(batches):
+    batch_filenames = [f["filename"] for f in batch]
+    batch_patches = "\n\n".join([f"FILE: {f['filename']}\n{f['patch']}" for f in batch])
+    
+    # Batch-specific prompt
     file_prompt = f"""
-Review this file: {filename}
+Review these {len(batch)} files:
+{', '.join(batch_filenames)}
 
-Patch:
-{patch}
+Patches:
+{batch_patches}
 
 INSTRUCTIONS:
 1. Review carefully for bugs, security, performance, code quality.
 2. Be specific: exact problem + solution.
-3. Use patch @@ headers for line context.
+3. Use patch @@ headers for line context (e.g., @@ -10,5 +10,6 @@ means changes around original line 10).
 4. Return ONLY valid JSON array:
 [
   {{
-    "line": 45,
+    "file": "{batch_filenames[0]}",  // Exact filename
+    "line": 45,  // Original file line number
     "severity": "HIGH",
     "category": "BUG",
     "body": "Specific issue (2-3 sentences max)"
   }}
 ]
+
+RULES:
+- "file": Exact filename from list.
+- "line": Original file line (from patch context).
+- "severity": CRITICAL / HIGH / MEDIUM / LOW
+- "category": SECURITY / BUG / PERFORMANCE / MAINTAINABILITY / STYLE
+- If no issues: return []
+- NO text outside JSON.
 """
 
     try:
-        response = call_openai(file_prompt, max_tokens=800)
+        response = call_openai(file_prompt, max_tokens=1000 * len(batch))  # Scale tokens with batch
         content = response["choices"][0]["message"]["content"].strip()
 
-        # Clean JSON
+        # Clean & parse JSON (robust)
         if "```" in content:
             parts = content.split("```")
             for part in parts:
@@ -112,50 +118,54 @@ INSTRUCTIONS:
             content = content[start:end]
 
         comments = json.loads(content)
-        print(f"File {filename}: {len(comments)} issues found")
+        print(f"Batch {batch_idx+1}: {len(comments)} issues found across {len(batch)} files")
 
-        # Track per file
-        file_comments = []
-        file_severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+        # Post inline comments & counts (per file in batch)
+        for file_data in batch:
+            filename = file_data["filename"]
+            file_comments = []
+            file_severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            
+            file_comments_list = [c for c in comments if c.get("file") == filename]
+            
+            for comment in file_comments_list:
+                if not isinstance(comment, dict):
+                    continue
 
-        for comment in comments:
-            if not isinstance(comment, dict):
-                continue
+                line = comment.get("line")
+                severity = comment.get("severity", "LOW")
+                category = comment.get("category", "GENERAL")
+                body = comment.get("body", "")
 
-            line = comment.get("line")
-            severity = comment.get("severity", "LOW")
-            category = comment.get("category", "GENERAL")
-            body = comment.get("body", "")
+                if line and body:
+                    emoji = {
+                        "CRITICAL": "🔴",
+                        "HIGH": "🟠",
+                        "MEDIUM": "🟡",
+                        "LOW": "🔵",
+                    }.get(severity, "💡")
+                    comment_body = f"{emoji} **{severity}** | {category}\n\n{body}"
 
-            if line and body:
-                emoji = {
-                    "CRITICAL": "🔴",
-                    "HIGH": "🟠",
-                    "MEDIUM": "🟡",
-                    "LOW": "🔵",
-                }.get(severity, "💡")
-                comment_body = f"{emoji} **{severity}** | {category}\n\n{body}"
+                    try:
+                        pr.create_review_comment(
+                            body=comment_body,
+                            commit=repo.get_commit(commit_sha),
+                            path=filename,
+                            line=int(line),
+                        )
+                        all_inline_comments.append(
+                            {"file": filename, "severity": severity, "category": category}
+                        )
+                        severity_counts[severity] += 1
+                        file_severity_counts[severity] += 1
+                        file_comments.append(f"{emoji} {severity} ({category})")
+                        print(f"  ✓ Inline: {filename}:{line}")
+                    except Exception as e:
+                        print(f"  ✗ Inline failed {filename}:{line} - {e}")
 
-                try:
-                    pr.create_review_comment(
-                        body=comment_body,
-                        commit=repo.get_commit(commit_sha),
-                        path=filename,
-                        line=int(line),
-                    )
-                    all_inline_comments.append(
-                        {"file": filename, "severity": severity, "category": category}
-                    )
-                    severity_counts[severity] += 1
-                    file_severity_counts[severity] += 1
-                    file_comments.append(f"{emoji} {severity} ({category})")
-                    print(f"  ✓ Inline: {filename}:{line}")
-                except Exception as e:
-                    print(f"  ✗ Inline failed {filename}:{line} - {e}")
-
-        # File summary
-        if file_comments:
-            file_summary = f"""## 📁 {filename} Review
+            # Post file-specific summary
+            if file_comments:
+                file_summary = f"""## 📁 {filename} Review
 
 **Issues Found:** {", ".join(file_comments)}
 
@@ -166,30 +176,31 @@ INSTRUCTIONS:
 - 🔵 Low: {file_severity_counts["LOW"]}
 
 Review inline comments above for details."""
-            pr.create_issue_comment(file_summary)
-        else:
-            pr.create_issue_comment(f"## ✅ {filename}\n\nNo issues found. Looks solid!")
 
-        time.sleep(1)
+                pr.create_issue_comment(file_summary)
+            else:
+                pr.create_issue_comment(
+                    f"## ✅ {filename}\n\nNo issues found. Looks solid!"
+                )
 
+        time.sleep(SLEEP_BETWEEN)  # Rate limit buffer
+
+    except json.JSONDecodeError as e:
+        print(f"JSON parse error for batch {batch_idx+1}: {e}. Skipping.")
+        for filename in batch_filenames:
+            pr.create_issue_comment(
+                f"## ⚠️ {filename}\n\nReview failed—check logs. Patch too complex?"
+            )
     except Exception as e:
-        print(f"Error for {filename}: {e}")
-        pr.create_issue_comment(f"## ❌ {filename}\n\nReview error: {str(e)}")
-        file_errors.append(filename)
+        print(f"Error for batch {batch_idx+1}: {e}")
+        for filename in batch_filenames:
+            pr.create_issue_comment(f"## ❌ {filename}\n\nReview error: {str(e)}")
 
-# ==== PR-wide summary ====
+# Overall summary (robust with retry)
 print(f"\nTotal inline comments: {len(all_inline_comments)}")
 
-if len(all_inline_comments) == 0 and len(file_errors) == 0:
-    pr.create_issue_comment(
-        "## 🎉 Full PR Review\n\n**APPROVED** - No issues across all files!"
-    )
-elif len(file_errors) > 0:
-    pr.create_issue_comment(
-        f"## ⚠️ Full PR Review Incomplete\n\n"
-        f"Some files could not be reviewed due to API errors or rate limits.\n\n"
-        f"**Unreviewed files:** {', '.join(file_errors)}"
-    )
+if len(all_inline_comments) == 0:
+    overall_summary = "## 🎉 Full PR Review\n\n**APPROVED** - No issues across all files!"
 else:
     critical_high = severity_counts["CRITICAL"] + severity_counts["HIGH"]
     if severity_counts["CRITICAL"] > 0:
@@ -213,6 +224,20 @@ else:
 - 🔵 Low: {severity_counts["LOW"]}
 
 {len(all_inline_comments)} inline comments posted. See file-specific sections above."""
-    pr.create_issue_comment(overall_summary)
 
-print("✅ File-by-file review complete + PR summary posted!")
+# Post with retry
+posted = False
+for attempt in range(2):
+    try:
+        pr.create_issue_comment(overall_summary)
+        print("  ✓ Posted overall summary")
+        posted = True
+        break
+    except Exception as e:
+        print(f"  ✗ Overall post attempt {attempt+1} failed: {e}")
+        time.sleep(2)
+
+if not posted:
+    print(f"  ❌ Overall summary FAILED. Body: {overall_summary[:200]}...")
+
+print("✅ File-by-file review complete!")
